@@ -1,0 +1,8 @@
+.autotest
+History.rdoc
+Manifest.txt
+README.rdoc
+Rakefile
+bin/static
+lib/static.rb
+test/test_static.rb
