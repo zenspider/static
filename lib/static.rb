@@ -33,23 +33,29 @@ class Static < MethodBasedSexpProcessor
     expander = PathExpander.new args, "**/*.{rb,rake}"
     files = expander.process
 
-    parser = RubyParser.new
-
     files.each do |file|
-      next if file =~ /models.tasks/
-
-      $stderr.print "."
-
-      ruby = file == '-' ? $stdin.read : File.binread(file)
-
-      parser.reset
-      ast = parser.parse ruby, file
+      ast = parse file
+      next unless ast
       process ast
     end
 
     $stderr.puts "done"
 
     build_graph
+  end
+
+  def parse file
+    parser = RubyParser.new
+
+    $stderr.print "."
+
+    ruby = file == '-' ? $stdin.read : File.binread(file)
+
+    parser.reset
+    parser.parse ruby, file
+  rescue RubyParser::SyntaxError, Racc::ParseError, Encoding::CompatibilityError => e
+    warn "Error parsing #{file}:"
+    warn "#{e.inspect} at #{e.backtrace.first(5).join(', ')}"
   end
 
   def process_call exp
@@ -117,6 +123,9 @@ class Static < MethodBasedSexpProcessor
     items = self.klasses.values
 
     digraph do
+      boxes
+      rotate
+
       dir = Graph::Attribute.new "dir = %p" % ["back"]
       head = Graph::Attribute.new "headport = w"
       tail = Graph::Attribute.new "tailport = e"
@@ -124,26 +133,22 @@ class Static < MethodBasedSexpProcessor
       # graph_attribs << "ratio=0.33"
       # graph_attribs << "overlap=scalexy" # false, compress, ...
 
-      rotate
-
       items.each do |(type, name, sklass, *rest)|
         next if name.end_with? "::ClassMethods"
         next if name.end_with? "::InstanceMethods"
 
+        n = node name
+
         case type
         when :class then
-          n = node name
-          box << n
-
           if sklass then
+            sklass.gsub!(" ", "\n") # structs can be loooong
             e = edge sklass, name
             head << e
             tail << e
             dir << e
           end
         when :module then
-          n = node name
-          box << n
           blue << n
         end
 
@@ -151,7 +156,7 @@ class Static < MethodBasedSexpProcessor
           case msg
           when :include then
             e = edge name, subname
-            red << e
+            orange << e
           when :extend then
             e = edge name, subname
             blue << e
